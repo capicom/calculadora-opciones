@@ -2271,7 +2271,7 @@ async function fetchHistoricoVI() {
 // Cols: symbol(0) bidsize(1) bid(2) bidVI(3) askVI(4) ask(5) asksize(6) last(7)
 //       chg%(8) Strike(9) lastVI(10) lastVE(11) open(12) high(13) low(14)
 //       close(15) volume(16) nomvolume(17) lastupdate(18) Promedio(19)
-// Metadatos en cols 22-23: label | valor  (TLR, Días, Vencimiento, etc.)
+// Metadatos en cols 20-21: label | valor  (TLR, Días, Vencimiento, etc.)
 const CSV_FEED_URL = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vTOLUDiRTQtkZoW0a9Uesvibx3AHGKBLAtbCA65v2egQV3elg2-SNIXsk5l4E774eaPUduigSaS4C7A/pub?output=csv';
 
 // Mantener stub de fetchFlask para que el resto del código que lo llama no rompa
@@ -2305,8 +2305,8 @@ function csvARowsPlaza(text) {
 
   // Leer metadatos de col 20/21
   for (const r of raw) {
-    const label = (r[22]||'').toString().trim();
-    const val   = (r[23]||'').toString().replace('%','').replace(',','.').trim();
+    const label = (r[20]||'').toString().trim();
+    const val   = (r[21]||'').toString().replace('%','').replace(',','.').trim();
     if (label === 'TLR')                    tlr  = parseFloat(val) || tlr;
     if (label === 'Plazo al Vto. (días)')   dias = parseInt(val)   || dias;
     // GGAL: primera fila cuyo col[0] === 'GGAL'
