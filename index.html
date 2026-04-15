@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Calculadora de Opciones GGAL - Capi</title>
+<title>CAPITAL OPERATOR - GGAL</title>
 <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;700&family=Syne:wght@700;800&display=swap" rel="stylesheet">
 <style>
 :root {
@@ -11,13 +11,16 @@
   --text: #e2e8f0; --accent: #00d4ff; --green: #00ff88; --red: #ff4466;
 }
 body { background: var(--bg); color: var(--text); font-family: 'JetBrains Mono', monospace; padding: 20px; }
-.card { background: var(--bg2); border: 1px solid var(--border); border-radius: 12px; padding: 20px; max-width: 900px; margin: auto; }
-h1 { font-family: 'Syne', sans-serif; color: var(--accent); margin-bottom: 20px; text-align: center; }
+.card { background: var(--bg2); border: 1px solid var(--border); border-radius: 12px; padding: 20px; max-width: 900px; margin: auto; box-shadow: 0 10px 30px rgba(0,0,0,0.5); }
+h1 { font-family: 'Syne', sans-serif; color: var(--accent); margin-bottom: 20px; text-align: center; letter-spacing: -1px; }
 .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 15px; }
 .input-group { display: flex; flex-direction: column; gap: 5px; }
-input, select { background: var(--bg3); border: 1px solid var(--border); color: white; padding: 10px; border-radius: 6px; outline: none; }
-#status { margin-top: 15px; font-size: 12px; color: #4a6080; text-align: center; }
-.data-display { margin-top: 20px; padding: 15px; background: #1a2332; border-radius: 8px; display: none; }
+label { font-size: 12px; color: #4a6080; text-transform: uppercase; font-weight: bold; }
+input, select { background: var(--bg3); border: 1px solid var(--border); color: white; padding: 12px; border-radius: 6px; outline: none; transition: border 0.3s; font-family: 'JetBrains Mono'; }
+input:focus, select:focus { border-color: var(--accent); }
+#status { margin-top: 15px; font-size: 11px; color: #4a6080; text-align: center; }
+.data-display { margin-top: 20px; padding: 20px; background: #1a2332; border-radius: 8px; display: none; border-left: 4px solid var(--accent); }
+.val { font-weight: bold; font-size: 1.1em; }
 </style>
 </head>
 <body>
@@ -28,7 +31,7 @@ input, select { background: var(--bg3); border: 1px solid var(--border); color: 
   <div class="grid">
     <div class="input-group">
       <label>Subyacente (GGAL):</label>
-      <input type="number" id="inp-s" step="0.01" placeholder="Cargando...">
+      <input type="text" id="inp-s" readonly placeholder="Cargando...">
     </div>
     <div class="input-group">
       <label>Seleccionar Strike:</label>
@@ -40,18 +43,18 @@ input, select { background: var(--bg3); border: 1px solid var(--border); color: 
 
   <div id="data-display" class="data-display">
     <div class="grid">
-      <div>Símbolo: <span id="out-sym" style="color:var(--accent)">-</span></div>
-      <div>Strike: <span id="out-strike">-</span></div>
-      <div>Compra (Bid): <span id="out-bid" style="color:var(--green)">-</span></div>
-      <div>Venta (Ask): <span id="out-ask" style="color:var(--red)">-</span></div>
+      <div><label>Símbolo</label><br><span id="out-sym" class="val" style="color:var(--accent)">-</span></div>
+      <div><label>Strike</label><br><span id="out-strike" class="val">-</span></div>
+      <div><label>Compra (Bid)</label><br><span id="out-bid" class="val" style="color:var(--green)">-</span></div>
+      <div><label>Venta (Ask)</label><br><span id="out-ask" class="val" style="color:var(--red)">-</span></div>
     </div>
   </div>
 
-  <div id="status">Iniciando conexión con Google Sheets...</div>
+  <div id="status">Conectando con el mercado...</div>
 </div>
 
 <script>
-// --- CONFIGURACIÓN DE DATOS ---
+// --- CONFIGURACIÓN ---
 const sheetId = 'e/2PACX-1vTOLUDiRTQtkZoW0a9Uesvibx3AHGKBLAtbCA65v2egQV3elg2-SNIXsk5l4E774eaPUduigSaS4C7A';
 const urlCsv = `https://docs.google.com/spreadsheets/d/${sheetId}/pub?output=csv`;
 const proxyUrl = 'https://corsproxy.io/?' + encodeURIComponent(urlCsv);
@@ -65,16 +68,18 @@ async function fetchMarketData() {
         if (!response.ok) throw new Error('Error en la red');
         const csvText = await response.text();
         
-        // Procesar filas y saltar encabezados de metadatos (fila 1 y 2)
-        const rows = csvText.split('\n').map(row => row.split(',')).slice(2);
+        // 1. Limpieza total de filas y columnas (quitamos espacios y retornos de carro)
+        const rows = csvText.split('\n')
+            .map(row => row.split(',').map(cell => cell.trim().replace(/"/g, '')))
+            .slice(2); 
         
-        // 1. Cargar Spot GGAL
+        // 2. Buscar GGAL (Precio Spot)
         const ggalRow = rows.find(r => r[0] === 'GGAL');
         if (ggalRow) {
-            document.getElementById('inp-s').value = parseArgNumber(ggalRow[7]); // Columna 'last'
+            document.getElementById('inp-s').value = parseArgNumber(ggalRow[7]); 
         }
 
-        // 2. Filtrar y cargar Opciones
+        // 3. Filtrar Opciones (Calls y Puts)
         marketRows = rows.filter(r => r[0] && (r[0].startsWith('GFGC') || r[0].startsWith('GFGV')))
             .map(r => ({
                 symbol: r[0],
@@ -85,22 +90,25 @@ async function fetchMarketData() {
 
         actualizarSelectores(marketRows);
         statusEl.innerText = "Sincronizado: " + new Date().toLocaleTimeString();
+        statusEl.style.color = "var(--green)";
     } catch (error) {
         console.error(error);
-        statusEl.innerText = "Error de conexión. Usa Live Server o GitHub Pages.";
+        statusEl.innerText = "Error de conexión. Reintente en unos segundos.";
         statusEl.style.color = "var(--red)";
     }
 }
 
 function parseArgNumber(text) {
-    if (!text) return 0;
-    // Limpieza de formato argentino: quita comillas, puntos de miles y cambia coma por punto
-    const clean = text.replace(/"/g, '').trim().replace(/\./g, '').replace(',', '.');
+    if (!text || text === "") return 0;
+    // Quitamos puntos de miles y cambiamos coma por punto decimal
+    const clean = text.replace(/\./g, '').replace(',', '.');
     return parseFloat(clean) || 0;
 }
 
 function actualizarSelectores(strikes) {
     const select = document.getElementById('sel-k');
+    const actualIdx = select.value; // Guardar selección actual
+    
     select.innerHTML = '<option value="">-- Seleccionar Base --</option>';
     strikes.forEach((opt, index) => {
         const el = document.createElement('option');
@@ -108,6 +116,8 @@ function actualizarSelectores(strikes) {
         el.textContent = `${opt.symbol} (K: ${opt.strike})`;
         select.appendChild(el);
     });
+    
+    if(actualIdx) select.value = actualIdx;
 }
 
 function seleccionarOpcion() {
@@ -124,11 +134,9 @@ function seleccionarOpcion() {
     document.getElementById('out-strike').innerText = opt.strike.toLocaleString('es-AR');
     document.getElementById('out-bid').innerText = opt.bid.toLocaleString('es-AR');
     document.getElementById('out-ask').innerText = opt.ask.toLocaleString('es-AR');
-    
-    // Aquí puedes disparar tu función de calcular() de Black-Scholes si la tienes
 }
 
-// Ejecución automática
+// Iniciar
 window.onload = fetchMarketData;
 // Refresco automático cada 30 segundos
 setInterval(fetchMarketData, 30000);
