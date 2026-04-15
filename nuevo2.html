@@ -1,0 +1,166 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>CAPITAL OPERATOR - GGAL</title>
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;700&family=Syne:wght@700;800&display=swap" rel="stylesheet">
+<style>
+:root {
+  --bg: #070b0f; --bg2: #0d1117; --bg3: #131a22; --border: #1e2d3d;
+  --text: #e2e8f0; --accent: #00d4ff; --green: #00ff88; --red: #ff4466; --gold: #ffcc00;
+}
+body { background: var(--bg); color: var(--text); font-family: 'JetBrains Mono', monospace; padding: 20px; }
+.card { background: var(--bg2); border: 1px solid var(--border); border-radius: 12px; padding: 20px; max-width: 1000px; margin: auto; }
+h1 { font-family: 'Syne', sans-serif; color: var(--accent); text-align: center; margin-bottom: 20px; }
+.grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 15px; }
+.input-group { display: flex; flex-direction: column; gap: 5px; }
+label { font-size: 11px; color: #4a6080; text-transform: uppercase; font-weight: bold; }
+input, select { background: var(--bg3); border: 1px solid var(--border); color: white; padding: 10px; border-radius: 6px; outline: none; font-family: 'JetBrains Mono'; }
+.data-display { margin-top: 20px; padding: 20px; background: #1a2332; border-radius: 8px; border-top: 3px solid var(--accent); }
+.val { font-weight: bold; font-size: 1.1em; display: block; margin-top: 4px; }
+#status { margin-top: 15px; font-size: 11px; color: #4a6080; text-align: center; }
+</style>
+</head>
+<body>
+
+<div class="card">
+  <h1>CAPITAL OPERATOR - GGAL</h1>
+  
+  <div class="grid">
+    <div class="input-group">
+      <label>Spot GGAL</label>
+      <input type="text" id="inp-s" readonly placeholder="Cargando...">
+    </div>
+    <div class="input-group">
+      <label>TLR (%)</label>
+      <input type="number" id="inp-r" value="70" onchange="seleccionarOpcion()">
+    </div>
+    <div class="input-group">
+      <label>Días al Vto</label>
+      <input type="number" id="inp-d" value="60" onchange="seleccionarOpcion()">
+    </div>
+    <div class="input-group">
+      <label>Seleccionar Strike</label>
+      <select id="sel-k" onchange="seleccionarOpcion()">
+        <option value="">Esperando mercado...</option>
+      </select>
+    </div>
+  </div>
+
+  <div id="data-display" class="data-display" style="display:none">
+    <div class="grid">
+      <div><label>Símbolo</label><span id="out-sym" class="val" style="color:var(--accent)">-</span></div>
+      <div><label>Teórico BS</label><span id="out-teorico" class="val" style="color:var(--gold)">-</span></div>
+      <div><label>Delta</label><span id="out-delta" class="val">-</span></div>
+      <div><label>Gamma</label><span id="out-gamma" class="val">-</span></div>
+      <div><label>Compra (Bid)</label><span id="out-bid" class="val" style="color:var(--green)">-</span></div>
+      <div><label>Venta (Ask)</label><span id="out-ask" class="val" style="color:var(--red)">-</span></div>
+    </div>
+  </div>
+
+  <div id="status">Sincronizando feed...</div>
+</div>
+
+<script>
+const sheetId = 'e/2PACX-1vTOLUDiRTQtkZoW0a9Uesvibx3AHGKBLAtbCA65v2egQV3elg2-SNIXsk5l4E774eaPUduigSaS4C7A';
+const urlCsv = `https://docs.google.com/spreadsheets/d/${sheetId}/pub?output=csv`;
+const proxyUrl = 'https://corsproxy.io/?' + encodeURIComponent(urlCsv);
+
+let marketRows = [];
+
+// --- MOTOR MATEMÁTICO BLACK-SCHOLES ---
+const ndist = (z) => {
+  if (z > 6) return 1; if (z < -6) return 0;
+  const b1 = 0.31938153, b2 = -0.356563782, b3 = 1.781477937, b4 = -1.821255978, b5 = 1.330274429, p = 0.2316419, c = 0.39894228;
+  const a = Math.abs(z), t = 1 / (1 + a * p);
+  const b = c * Math.exp(-z * z / 2) * t * (t * (t * (t * (t * b5 + b4) + b3) + b2) + b1);
+  return z > 0 ? 1 - b : b;
+};
+
+const npdf = (x) => Math.exp(-0.5 * x * x) / Math.sqrt(2 * Math.PI);
+
+function calcGreeks(S, K, T, r, vi, type) {
+    if (T <= 0) return { teorico: 0, delta: 0, gamma: 0 };
+    const d1 = (Math.log(S / K) + (r + (vi * vi) / 2) * T) / (vi * Math.sqrt(T));
+    const d2 = d1 - vi * Math.sqrt(T);
+    
+    let teorico = (type === 'C') 
+        ? S * ndist(d1) - K * Math.exp(-r * T) * ndist(d2)
+        : K * Math.exp(-r * T) * ndist(-d2) - S * ndist(-d1);
+        
+    let delta = (type === 'C') ? ndist(d1) : ndist(d1) - 1;
+    let gamma = npdf(d1) / (S * vi * Math.sqrt(T));
+    
+    return { teorico, delta, gamma };
+}
+
+async function fetchMarketData() {
+    try {
+        const response = await fetch(proxyUrl);
+        const csvText = await response.text();
+        const rows = csvText.split('\n')
+            .map(row => row.split(',').map(c => c.trim().replace(/"/g, '')))
+            .slice(2);
+        
+        const ggal = rows.find(r => r[0] === 'GGAL');
+        if (ggal) document.getElementById('inp-s').value = parseArg(ggal[7]);
+
+        marketRows = rows.filter(r => r[0] && (r[0].startsWith('GFGC') || r[0].startsWith('GFGV')))
+            .map(r => ({
+                sym: r[0],
+                bid: parseArg(r[2]),
+                ask: parseArg(r[5]),
+                strike: parseArg(r[9]),
+                type: r[0].includes('C') ? 'C' : 'P'
+            }));
+
+        renderSelect();
+        document.getElementById('status').innerText = "Actualizado: " + new Date().toLocaleTimeString();
+    } catch (e) { console.error(e); }
+}
+
+function parseArg(val) {
+    if (!val) return 0;
+    return parseFloat(val.replace(/\./g, '').replace(',', '.')) || 0;
+}
+
+function renderSelect() {
+    const select = document.getElementById('sel-k');
+    const current = select.value;
+    select.innerHTML = '<option value="">-- Seleccionar --</option>';
+    marketRows.forEach((opt, index) => {
+        const el = document.createElement('option');
+        el.value = index;
+        el.textContent = `${opt.sym} (K: ${opt.strike})`;
+        select.appendChild(el);
+    });
+    if(current) select.value = current;
+}
+
+function seleccionarOpcion() {
+    const idx = document.getElementById('sel-k').value;
+    if (idx === "") return;
+    
+    const opt = marketRows[idx];
+    const S = parseArg(document.getElementById('inp-s').value);
+    const r = parseFloat(document.getElementById('inp-r').value) / 100;
+    const T = parseFloat(document.getElementById('inp-d').value) / 365;
+    const vi = 0.70; // VI Estimada (puedes ajustar o automatizar luego)
+
+    const greeks = calcGreeks(S, opt.strike, T, r, vi, opt.type);
+
+    document.getElementById('data-display').style.display = 'block';
+    document.getElementById('out-sym').innerText = opt.sym;
+    document.getElementById('out-teorico').innerText = greeks.teorico.toFixed(2);
+    document.getElementById('out-delta').innerText = greeks.delta.toFixed(3);
+    document.getElementById('out-gamma').innerText = greeks.gamma.toFixed(4);
+    document.getElementById('out-bid').innerText = opt.bid;
+    document.getElementById('out-ask').innerText = opt.ask;
+}
+
+window.onload = fetchMarketData;
+setInterval(fetchMarketData, 30000);
+</script>
+</body>
+</html>
