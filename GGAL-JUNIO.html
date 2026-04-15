@@ -2303,10 +2303,10 @@ function csvARowsPlaza(text) {
 
   let ggalRow = null, tlr = 21.1, dias = 5;
 
-  // Leer metadatos de col 20/21
+  // Leer metadatos de col 21/22
   for (const r of raw) {
-    const label = (r[20]||'').toString().trim();
-    const val   = (r[21]||'').toString().replace('%','').replace(',','.').trim();
+    const label = (r[21]||'').toString().trim();
+    const val   = (r[22]||'').toString().replace('%','').replace(',','.').trim();
     if (label === 'TLR')                    tlr  = parseFloat(val) || tlr;
     if (label === 'Plazo al Vto. (días)')   dias = parseInt(val)   || dias;
     // GGAL: primera fila cuyo col[0] === 'GGAL'
